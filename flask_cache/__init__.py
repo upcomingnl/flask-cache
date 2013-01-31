@@ -67,6 +67,8 @@ class Cache(object):
 
     def init_app(self, app, config=None):
         "This is used to initialize cache with your app object"
+        self.app = app
+
         if not isinstance(config, (NoneType, dict)):
             raise ValueError("`config` must be an instance of dict or NoneType")
 
