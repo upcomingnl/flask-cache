@@ -699,7 +699,9 @@ class NotInCacheContext(Exception):
         self.key = key
 
     def __str__(self):
-        return "Before you can use the [%s] key you have to add it to the cache context first using the `cache.context` decorator." % self.key
+        return "Before you can use the [%s] cache_context key you have to add it to the cache_context first " \
+               "using the `cache.cache_context.add_key` method " \
+               "or add it to the `cache.memoize_with_context` decorator." % self.key
 
 
 class UnknownCacheContextKey(Exception):
@@ -707,5 +709,6 @@ class UnknownCacheContextKey(Exception):
         self.key = key
 
     def __str__(self):
-        return "The cache context key you tried to add [%s] doesn't exists as a property on the cache_context, please add it." % self.key
+        return "The [%s] cache_context key you tried to add isn't configured as a cache_context key, " \
+               "please add it to `cache.cache_context_config`." % self.key
 
