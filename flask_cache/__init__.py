@@ -69,6 +69,7 @@ class Cache(object):
     def __init__(self, app=None, with_jinja2_ext=True, config=None):
         self.with_jinja2_ext = with_jinja2_ext
         self.config = config
+        self.default_cache_context = []
 
         self.app = app
         if app is not None:
@@ -481,8 +482,9 @@ class Cache(object):
 
         if not hasattr(scope, 'cache_context'):
             scope.cache_context = CacheContext(self)
-            scope.cache_context.add_key('is_alt_statics')
-            scope.cache_context.add_key('is_HQ')
+
+            for key in self.default_cache_context:
+                scope.cache_context.add_key(key)
 
         return scope.cache_context
 
