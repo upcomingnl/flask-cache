@@ -464,6 +464,69 @@ class Cache(object):
             return decorated_function
         return memoize
 
+    def get_cache_context_scope(self):
+        from flask import g
+        return g
+
+    @property
+    def cache_context_config(self):
+        if not hasattr(self, '_cache_context_config'):
+            self._cache_context_config = {}
+
+        return self._cache_context_config
+
+    @property
+    def cache_context(self):
+        scope = self.get_cache_context_scope()
+
+        if not hasattr(scope, 'cache_context'):
+            scope.cache_context = CacheContext(self)
+            scope.cache_context.add_key('is_alt_statics')
+            scope.cache_context.add_key('is_HQ')
+
+        return scope.cache_context
+
+    @cache_context.setter
+    def cache_context(self, ctx):
+        scope = self.get_cache_context_scope()
+        scope.cache_context = ctx
+
+    def memoize_with_context(self, contextkeys=None, timeout=None, make_name=None, unless=None):
+        """
+        behaves just like :memoize except it adds the CacheContext to the cache key
+        doing this using the make_name param of :memoize
+        """
+
+        def _make_name(funcname):
+            funcname += "cache_context:%s" % str(self.cache_context)
+
+            return make_name(funcname) if callable(make_name) else funcname
+
+        memoize = self.memoize(timeout=timeout, make_name=_make_name, unless=unless)
+
+        def in_cache_context(fn):
+            fn = memoize(fn)
+
+            @functools.wraps(fn)
+            def _in_cache_context(*args, **kwargs):
+                if contextkeys:
+                    for key in [contextkeys] if isinstance(contextkeys, basestring) else contextkeys:
+                        self.cache_context.add_key(key)
+
+                self.cache_context.in_cache_context = True
+                return fn(*args, **kwargs)
+
+            _in_cache_context.allow_cache_context = True
+
+            _in_cache_context.uncached        = fn.uncached
+            _in_cache_context.cache_timeout   = fn.cache_timeout
+            _in_cache_context.make_cache_key  = fn.make_cache_key
+            _in_cache_context.delete_memoized = fn.delete_memoized
+
+            return _in_cache_context
+
+        return in_cache_context
+
     def delete_memoized(self, f, *args, **kwargs):
         """
         Deletes the specified functions caches, based by given parameters.
@@ -575,3 +638,72 @@ class Cache(object):
             if current_app.debug:
                 raise
             logger.exception("Exception possibly due to cache backend.")
+
+
+class CacheContext(object):
+    def __init__(self, cache, *contextkeys):
+        self.cache = cache
+        self.parent = None
+        self.context = {}
+        self.in_cache_context = False
+
+        for key in contextkeys:
+            self.add_key(key)
+
+    def add_value(self, key, value):
+        self.context[key] = value
+
+    def add_key(self, key):
+        if key not in self.cache.cache_context_config:
+            raise UnknownCacheContextKey(key)
+
+        self.context[key] = self.get_from_context(key)
+
+    def __getattr__(self, key):
+        try:
+            return self.get_from_context(key)
+        except UnknownCacheContextKey:
+            raise AttributeError()
+
+    def get_from_context(self, key):
+        if key not in self.context and self.in_cache_context:
+            raise NotInCacheContext(key)
+        elif not self.context.has_key(key):
+            if key not in self.cache.cache_context_config:
+                raise UnknownCacheContextKey(key)
+
+            self.context[key] = self.cache.cache_context_config[key]()
+
+        return self.context[key]
+
+    def __str__(self):
+        return str(self.context)
+
+    def __enter__(self):
+        self.parent = self.cache.cache_context
+
+        if self.parent == self:
+            raise Exception("Entering current CacheContext is not possible.")
+
+        self.cache.cache_context = self
+        self.in_cache_context = True
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.cache.cache_context = self.parent
+
+
+class NotInCacheContext(Exception):
+    def __init__(self, key):
+        self.key = key
+
+    def __str__(self):
+        return "Before you can use the [%s] key you have to add it to the cache context first using the `cache.context` decorator." % self.key
+
+
+class UnknownCacheContextKey(Exception):
+    def __init__(self, key):
+        self.key = key
+
+    def __str__(self):
+        return "The cache context key you tried to add [%s] doesn't exists as a property on the cache_context, please add it." % self.key
+
