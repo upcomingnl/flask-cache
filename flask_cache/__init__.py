@@ -69,7 +69,7 @@ class Cache(object):
     def __init__(self, app=None, with_jinja2_ext=True, config=None):
         self.with_jinja2_ext = with_jinja2_ext
         self.config = config
-        self.default_cache_context = []
+        self.default_memoize_context = []
 
         self.app = app
         if app is not None:
@@ -465,66 +465,66 @@ class Cache(object):
             return decorated_function
         return memoize
 
-    def get_cache_context_scope(self):
+    def get_memoize_context_scope(self):
         from flask import g
         return g
 
     @property
-    def cache_context_config(self):
-        if not hasattr(self, '_cache_context_config'):
-            self._cache_context_config = {}
+    def memoize_context_config(self):
+        if not hasattr(self, '_memoize_context_config'):
+            self._memoize_context_config = {}
 
-        return self._cache_context_config
+        return self._memoize_context_config
 
     @property
-    def cache_context(self):
-        scope = self.get_cache_context_scope()
+    def memoize_context(self):
+        scope = self.get_memoize_context_scope()
 
-        if not hasattr(scope, 'cache_context'):
-            scope.cache_context = CacheContext(self)
+        if not hasattr(scope, 'memoize_context'):
+            scope.memoize_context = MemoizeContext(self)
 
-            for key in self.default_cache_context:
-                scope.cache_context.add_key(key)
+            for key in self.default_memoize_context:
+                scope.memoize_context.add_key(key)
 
-        return scope.cache_context
+        return scope.memoize_context
 
-    @cache_context.setter
-    def cache_context(self, ctx):
-        scope = self.get_cache_context_scope()
-        scope.cache_context = ctx
+    @memoize_context.setter
+    def memoize_context(self, ctx):
+        scope = self.get_memoize_context_scope()
+        scope.memoize_context = ctx
 
     def memoize_with_context(self, contextkeys=None, timeout=None, make_name=None, unless=None):
         """
-        behaves just like :memoize except it adds the CacheContext to the cache key
+        behaves just like :memoize except it adds the MemoizeContext to the cache key
         doing this using the make_name param of :memoize
         """
 
         def _make_name(funcname):
-            funcname += "cache_context:%s" % str(self.cache_context)
+            funcname += "memoize_context:%s" % str(self.memoize_context)
 
             return make_name(funcname) if callable(make_name) else funcname
 
         memoize = self.memoize(timeout=timeout, make_name=_make_name, unless=unless)
 
-        def in_cache_context(fn):
+        def in_memoize_context(fn):
             fn = memoize(fn)
 
             @functools.wraps(fn)
-            def _in_cache_context(*args, **kwargs):
-                with CacheContext(self, *([contextkeys] if isinstance(contextkeys, basestring) else contextkeys)) as context:
-                    context.in_cache_context = True
+            def _in_memoize_context(*args, **kwargs):
+                with MemoizeContext(self, *([contextkeys] if isinstance(contextkeys, basestring) else contextkeys)) as context:
+                    context.in_memoize_context = True
                     return fn(*args, **kwargs)
 
-            _in_cache_context.allow_cache_context = True
+            _in_memoize_context.allow_memoize_context = True
 
-            _in_cache_context.uncached        = fn.uncached
-            _in_cache_context.cache_timeout   = fn.cache_timeout
-            _in_cache_context.make_cache_key  = fn.make_cache_key
-            _in_cache_context.delete_memoized = fn.delete_memoized
+            _in_memoize_context.uncached        = fn.uncached
+            _in_memoize_context.cache_timeout   = fn.cache_timeout
+            _in_memoize_context.make_cache_key  = fn.make_cache_key
+            _in_memoize_context.delete_memoized = fn.delete_memoized
 
-            return _in_cache_context
+            return _in_memoize_context
 
-        return in_cache_context
+        return in_memoize_context
 
     def delete_memoized(self, f, *args, **kwargs):
         """
@@ -639,12 +639,12 @@ class Cache(object):
             logger.exception("Exception possibly due to cache backend.")
 
 
-class CacheContext(object):
+class MemoizeContext(object):
     def __init__(self, cache, *contextkeys):
         self.cache = cache
         self.parent = None
         self.context = {}
-        self.in_cache_context = False
+        self.in_memoize_context = False
 
         for key in contextkeys:
             self.add_key(key)
@@ -653,25 +653,25 @@ class CacheContext(object):
         self.context[key] = value
 
     def add_key(self, key):
-        if key not in self.cache.cache_context_config:
-            raise UnknownCacheContextKey(key)
+        if key not in self.cache.memoize_context_config:
+            raise UnknownMemoizeContextKey(key)
 
         self.context[key] = self.get_from_context(key)
 
     def __getattr__(self, key):
         try:
             return self.get_from_context(key)
-        except UnknownCacheContextKey:
+        except UnknownMemoizeContextKey:
             raise AttributeError()
 
     def get_from_context(self, key):
-        if key not in self.context and self.in_cache_context:
-            raise NotInCacheContext(key)
+        if key not in self.context and self.in_memoize_context:
+            raise NotInMemoizeContext(key)
         elif not self.context.has_key(key):
-            if key not in self.cache.cache_context_config:
-                raise UnknownCacheContextKey(key)
+            if key not in self.cache.memoize_context_config:
+                raise UnknownMemoizeContextKey(key)
 
-            self.context[key] = self.cache.cache_context_config[key]()
+            self.context[key] = self.cache.memoize_context_config[key]()
 
         return self.context[key]
 
@@ -679,35 +679,35 @@ class CacheContext(object):
         return str(self.context)
 
     def __enter__(self):
-        self.parent = self.cache.cache_context
+        self.parent = self.cache.memoize_context
 
         if self.parent == self:
-            raise Exception("Entering current CacheContext is not possible.")
+            raise Exception("Entering current MemoizeContext is not possible.")
 
-        self.cache.cache_context = self
-        self.in_cache_context = True
+        self.cache.memoize_context = self
+        self.in_memoize_context = True
 
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.cache.cache_context = self.parent
+        self.cache.memoize_context = self.parent
 
 
-class NotInCacheContext(Exception):
+class NotInMemoizeContext(Exception):
     def __init__(self, key):
         self.key = key
 
     def __str__(self):
-        return "Before you can use the [%s] cache_context key you have to add it to the cache_context first " \
-               "using the `cache.cache_context.add_key` method " \
+        return "Before you can use the [%s] memoize_context key you have to add it to the memoize_context first " \
+               "using the `cache.memoize_context.add_key` method " \
                "or add it to the `cache.memoize_with_context` decorator." % self.key
 
 
-class UnknownCacheContextKey(Exception):
+class UnknownMemoizeContextKey(Exception):
     def __init__(self, key):
         self.key = key
 
     def __str__(self):
-        return "The [%s] cache_context key you tried to add isn't configured as a cache_context key, " \
-               "please add it to `cache.cache_context_config`." % self.key
+        return "The [%s] memoize_context key you tried to add isn't configured as a memoize_context key, " \
+               "please add it to `cache.memoize_context_config`." % self.key
 
