@@ -481,10 +481,7 @@ class Cache(object):
         scope = self.get_memoize_context_scope()
 
         if not hasattr(scope, 'memoize_context'):
-            scope.memoize_context = MemoizeContext(self)
-
-            for key in self.default_memoize_context:
-                scope.memoize_context.add_key(key)
+            scope.memoize_context = self.new_memoize_context()
 
         return scope.memoize_context
 
@@ -492,6 +489,22 @@ class Cache(object):
     def memoize_context(self, ctx):
         scope = self.get_memoize_context_scope()
         scope.memoize_context = ctx
+
+    def new_memoize_context(self, *contextkeys):
+        memoize_context = MemoizeContext(self)
+
+        for key in self.default_memoize_context:
+            memoize_context.add_key(key)
+
+
+        if contextkeys:
+            if len(contextkeys) == 1 and isinstance(contextkeys[0], (list, tuple)):
+                contextkeys = contextkeys[0]
+
+            for key in filter(None, contextkeys):
+                memoize_context.add_key(key)
+
+        return memoize_context
 
     def memoize_with_context(self, contextkeys=None, timeout=None, make_name=None, unless=None):
         """
@@ -511,8 +524,8 @@ class Cache(object):
 
             @functools.wraps(fn)
             def _in_memoize_context(*args, **kwargs):
-                with MemoizeContext(self, *([contextkeys] if isinstance(contextkeys, basestring) else contextkeys)) as context:
-                    context.in_memoize_context = True
+                with self.new_memoize_context(contextkeys) as memoize_context:
+                    memoize_context.in_memoize_context = True
                     return fn(*args, **kwargs)
 
             _in_memoize_context.allow_memoize_context = True
