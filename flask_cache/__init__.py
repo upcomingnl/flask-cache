@@ -511,12 +511,9 @@ class Cache(object):
 
             @functools.wraps(fn)
             def _in_cache_context(*args, **kwargs):
-                if contextkeys:
-                    for key in [contextkeys] if isinstance(contextkeys, basestring) else contextkeys:
-                        self.cache_context.add_key(key)
-
-                self.cache_context.in_cache_context = True
-                return fn(*args, **kwargs)
+                with CacheContext(self, *([contextkeys] if isinstance(contextkeys, basestring) else contextkeys)) as context:
+                    context.in_cache_context = True
+                    return fn(*args, **kwargs)
 
             _in_cache_context.allow_cache_context = True
 
@@ -689,6 +686,8 @@ class CacheContext(object):
 
         self.cache.cache_context = self
         self.in_cache_context = True
+
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cache.cache_context = self.parent
