@@ -490,16 +490,20 @@ class Cache(object):
         scope = self.get_memoize_context_scope()
         scope.memoize_context = ctx
 
-    def new_memoize_context(self, *contextkeys):
+    def new_memoize_context(self, contextkeys=None):
         memoize_context = MemoizeContext(self)
 
         for key in self.default_memoize_context:
             memoize_context.add_key(key)
 
+        return self.add_memoize_contextkeys(contextkeys, memoize_context=memoize_context)
+
+    def add_memoize_contextkeys(self, contextkeys=None, memoize_context=None):
+        memoize_context = memoize_context or self.memoize_context
 
         if contextkeys:
-            if len(contextkeys) == 1 and isinstance(contextkeys[0], (list, tuple)):
-                contextkeys = contextkeys[0]
+            if isinstance(contextkeys, basestring):
+                contextkeys = [contextkeys]
 
             for key in filter(None, contextkeys):
                 memoize_context.add_key(key)
@@ -524,7 +528,7 @@ class Cache(object):
 
             @functools.wraps(fn)
             def _in_memoize_context(*args, **kwargs):
-                with self.new_memoize_context(contextkeys) as memoize_context:
+                with self.add_memoize_contextkeys(contextkeys) as memoize_context:
                     memoize_context.in_memoize_context = True
                     return fn(*args, **kwargs)
 
