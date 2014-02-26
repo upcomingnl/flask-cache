@@ -692,10 +692,8 @@ class MemoizeContext(object):
         return str(self.context)
 
     def __enter__(self):
+        # this could be `self`, but that's okay, eventually we'll __exit__ out if __enter__ was nested
         self.parent = self.cache.memoize_context
-
-        if self.parent == self:
-            raise Exception("Entering current MemoizeContext is not possible.")
 
         self.cache.memoize_context = self
         self.in_memoize_context = True
