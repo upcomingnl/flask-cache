@@ -528,8 +528,7 @@ class Cache(object):
 
             @functools.wraps(fn)
             def _in_memoize_context(*args, **kwargs):
-                with self.add_memoize_contextkeys(contextkeys) as memoize_context:
-                    memoize_context.in_memoize_context = True
+                with self.new_memoize_context(contextkeys) as memoize_context:
                     return fn(*args, **kwargs)
 
             _in_memoize_context.allow_memoize_context = True
